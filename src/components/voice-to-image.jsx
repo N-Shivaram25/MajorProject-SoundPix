@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import Peer from 'peerjs';
 import '../App.css';
 
 const VoiceToImage = () => {
@@ -44,6 +45,23 @@ const VoiceToImage = () => {
   const [showProjectTitleModal, setShowProjectTitleModal] = useState(false);
   const [projectTitle, setProjectTitle] = useState('');
   const [showYourDesigns, setShowYourDesigns] = useState(false);
+
+  // Video call states
+  const [roomId, setRoomId] = useState('');
+  const [userName, setUserName] = useState('');
+  const [userLocation, setUserLocation] = useState('');
+  const [joinRoomId, setJoinRoomId] = useState('');
+  const [isInCall, setIsInCall] = useState(false);
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [peer, setPeer] = useState(null);
+  const [currentCall, setCurrentCall] = useState(null);
+  const [videoCallLanguage, setVideoCallLanguage] = useState('en-IN');
+  const [liveTranslation, setLiveTranslation] = useState('');
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isTranslationActive, setIsTranslationActive] = useState(false);
+  const [translationRecognition, setTranslationRecognition] = useState(null);
 
   const { transcript, finalTranscript: speechFinalTranscript, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition({
     transcribing: true,
@@ -1118,6 +1136,345 @@ const VoiceToImage = () => {
     alert(`Project "${project.name}" loaded successfully!`);
   };
 
+  // Video Call Functions
+  const generateRoomId = () => {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+  };
+
+  const createRoom = async () => {
+    if (!userName.trim()) {
+      alert('Please enter your name first');
+      return;
+    }
+
+    try {
+      const newRoomId = generateRoomId();
+      setRoomId(newRoomId);
+      
+      // Initialize PeerJS
+      const newPeer = new Peer(newRoomId);
+      setPeer(newPeer);
+
+      newPeer.on('open', (id) => {
+        console.log('Room created with ID:', id);
+        document.getElementById('roomId').textContent = id;
+      });
+
+      newPeer.on('call', async (call) => {
+        console.log('Receiving call...');
+        
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true, 
+            audio: true 
+          });
+          setLocalStream(stream);
+          
+          const localVideo = document.getElementById('localVideo');
+          if (localVideo) {
+            localVideo.srcObject = stream;
+          }
+
+          call.answer(stream);
+          setCurrentCall(call);
+          setIsInCall(true);
+
+          call.on('stream', (remoteStream) => {
+            console.log('Receiving remote stream');
+            setRemoteStream(remoteStream);
+            const remoteVideo = document.getElementById('remoteVideo');
+            if (remoteVideo) {
+              remoteVideo.srcObject = remoteStream;
+            }
+            
+            // Hide placeholder
+            const placeholder = document.querySelector('.video-placeholder');
+            if (placeholder) {
+              placeholder.style.display = 'none';
+            }
+          });
+
+          call.on('close', () => {
+            endCall();
+          });
+
+        } catch (error) {
+          console.error('Error accessing media devices:', error);
+          alert('Could not access camera/microphone. Please check permissions.');
+        }
+      });
+
+      newPeer.on('error', (error) => {
+        console.error('PeerJS error:', error);
+        alert('Connection error: ' + error.message);
+      });
+
+    } catch (error) {
+      console.error('Error creating room:', error);
+      alert('Failed to create room: ' + error.message);
+    }
+  };
+
+  const joinRoom = async () => {
+    if (!joinRoomId.trim()) {
+      alert('Please enter a Room ID');
+      return;
+    }
+
+    if (!userName.trim()) {
+      alert('Please enter your name first');
+      return;
+    }
+
+    try {
+      // Initialize PeerJS with random ID for joiner
+      const joinerId = generateRoomId() + '_joiner';
+      const newPeer = new Peer(joinerId);
+      setPeer(newPeer);
+
+      newPeer.on('open', async () => {
+        console.log('Connected as:', joinerId);
+        
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true, 
+            audio: true 
+          });
+          setLocalStream(stream);
+          
+          const localVideo = document.getElementById('localVideo');
+          if (localVideo) {
+            localVideo.srcObject = stream;
+          }
+
+          // Call the room
+          const call = newPeer.call(joinRoomId.trim(), stream);
+          setCurrentCall(call);
+          setIsInCall(true);
+
+          call.on('stream', (remoteStream) => {
+            console.log('Receiving remote stream');
+            setRemoteStream(remoteStream);
+            const remoteVideo = document.getElementById('remoteVideo');
+            if (remoteVideo) {
+              remoteVideo.srcObject = remoteStream;
+            }
+            
+            // Hide placeholder
+            const placeholder = document.querySelector('.video-placeholder');
+            if (placeholder) {
+              placeholder.style.display = 'none';
+            }
+          });
+
+          call.on('close', () => {
+            endCall();
+          });
+
+        } catch (error) {
+          console.error('Error accessing media devices:', error);
+          alert('Could not access camera/microphone. Please check permissions.');
+        }
+      });
+
+      newPeer.on('error', (error) => {
+        console.error('PeerJS error:', error);
+        alert('Failed to join room: ' + error.message);
+      });
+
+    } catch (error) {
+      console.error('Error joining room:', error);
+      alert('Failed to join room: ' + error.message);
+    }
+  };
+
+  const toggleMute = () => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+      }
+    }
+  };
+
+  const toggleVideo = () => {
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoOff(!videoTrack.enabled);
+      }
+    }
+  };
+
+  const endCall = () => {
+    // Stop translation recognition
+    stopTranslationRecognition();
+    
+    if (currentCall) {
+      currentCall.close();
+    }
+    
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+    }
+    
+    if (remoteStream) {
+      setRemoteStream(null);
+    }
+    
+    if (peer) {
+      peer.destroy();
+      setPeer(null);
+    }
+    
+    setIsInCall(false);
+    setCurrentCall(null);
+    setRoomId('');
+    setJoinRoomId('');
+    
+    // Show placeholder again
+    const placeholder = document.querySelector('.video-placeholder');
+    if (placeholder) {
+      placeholder.style.display = 'flex';
+    }
+    
+    // Clear video elements
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    if (localVideo) localVideo.srcObject = null;
+    if (remoteVideo) remoteVideo.srcObject = null;
+    
+    document.getElementById('roomId').textContent = 'Not created';
+  };
+
+  const copyRoomId = () => {
+    if (roomId) {
+      navigator.clipboard.writeText(roomId).then(() => {
+        alert('Room ID copied to clipboard!');
+      }).catch(() => {
+        // Fallback for browsers that don't support clipboard API
+        const textArea = document.createElement('textarea');
+        textArea.value = roomId;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert('Room ID copied to clipboard!');
+      });
+    }
+  };
+
+  // Real-time Voice Translation Functions
+  const startTranslationRecognition = () => {
+    if (!browserSupportsSpeechRecognition) {
+      alert('Speech recognition not supported in this browser');
+      return;
+    }
+
+    try {
+      const recognition = new window.webkitSpeechRecognition() || new window.SpeechRecognition();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = videoCallLanguage;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        console.log('Translation recognition started');
+        setIsTranslationActive(true);
+      };
+
+      recognition.onresult = async (event) => {
+        const lastResultIndex = event.results.length - 1;
+        const lastResult = event.results[lastResultIndex];
+        
+        if (lastResult.isFinal) {
+          const spokenText = lastResult[0].transcript.trim();
+          console.log('Translating:', spokenText);
+          
+          try {
+            // Translate to the opposite language
+            let targetLang = 'en-IN';
+            if (videoCallLanguage === 'en-IN') {
+              // If speaking English, translate to the user's preferred language from the main language setting
+              targetLang = language;
+            }
+            
+            const translatedText = await translateToEnglish(spokenText, videoCallLanguage);
+            
+            // Display the translation
+            setLiveTranslation(`🗣️ You said: "${spokenText}"\n📝 Translation: "${translatedText}"`);
+            
+            // Clear translation after 10 seconds
+            setTimeout(() => {
+              setLiveTranslation('');
+            }, 10000);
+            
+          } catch (error) {
+            console.error('Translation error:', error);
+          }
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Translation recognition error:', event.error);
+        if (event.error === 'no-speech') {
+          // Restart recognition after a brief pause
+          setTimeout(() => {
+            if (isInCall && isTranslationActive) {
+              recognition.start();
+            }
+          }, 1000);
+        }
+      };
+
+      recognition.onend = () => {
+        // Restart recognition if still in call and translation is active
+        if (isInCall && isTranslationActive) {
+          setTimeout(() => {
+            try {
+              recognition.start();
+            } catch (error) {
+              console.log('Recognition restart failed:', error);
+            }
+          }, 500);
+        }
+      };
+
+      recognition.start();
+      setTranslationRecognition(recognition);
+      
+    } catch (error) {
+      console.error('Error starting translation recognition:', error);
+      alert('Failed to start voice translation');
+    }
+  };
+
+  const stopTranslationRecognition = () => {
+    if (translationRecognition) {
+      translationRecognition.stop();
+      setTranslationRecognition(null);
+    }
+    setIsTranslationActive(false);
+    setLiveTranslation('');
+  };
+
+  const toggleTranslation = () => {
+    if (isTranslationActive) {
+      stopTranslationRecognition();
+    } else {
+      startTranslationRecognition();
+    }
+  };
+
   if (!browserSupportsSpeechRecognition) {
     return <div className="error">Your browser does not support speech recognition.</div>;
   }
@@ -1230,6 +1587,17 @@ const VoiceToImage = () => {
               />
               <span className="radio-custom"></span>
               Voice to Scene
+            </label>
+            <label className="mode-option">
+              <input 
+                type="radio" 
+                name="mode" 
+                value="videocall" 
+                checked={currentMode === 'videocall'}
+                onChange={() => setCurrentMode('videocall')}
+              />
+              <span className="radio-custom"></span>
+              Video Call
             </label>
           </div>
 
@@ -1631,6 +1999,154 @@ const VoiceToImage = () => {
                 </div>
               </div>
             )}
+          </div>
+        ) : currentMode === 'videocall' ? (
+          // Video Call Mode UI
+          <div className="videocall-mode">
+            <div className="videocall-header">
+              <h1 className="vox-nova-title">Vox Nova</h1>
+              <div className="user-info">
+                <input 
+                  type="text" 
+                  placeholder="Your Name" 
+                  className="name-input" 
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                />
+                <input 
+                  type="text" 
+                  placeholder="Your Location" 
+                  className="location-input" 
+                  value={userLocation}
+                  onChange={(e) => setUserLocation(e.target.value)}
+                />
+                <button className="create-room-btn" onClick={createRoom} disabled={isInCall}>
+                  <i className="fas fa-plus"></i> Create Room ID
+                </button>
+              </div>
+            </div>
+            
+            <div className="videocall-main">
+              <div className="video-section">
+                <div className="main-video-screen">
+                  <video id="localVideo" autoPlay muted playsInline></video>
+                  <video id="remoteVideo" autoPlay playsInline></video>
+                  <div className="video-placeholder">
+                    <i className="fas fa-video video-icon"></i>
+                    <p>Video call will appear here</p>
+                  </div>
+                </div>
+                
+                <div className="video-controls">
+                  <button 
+                    className="video-control-btn" 
+                    onClick={toggleMute}
+                    title={isMuted ? "Unmute" : "Mute"}
+                  >
+                    <i className={`fas fa-${isMuted ? 'microphone-slash' : 'microphone'}`}></i>
+                  </button>
+                  <button 
+                    className="video-control-btn" 
+                    onClick={toggleVideo}
+                    title={isVideoOff ? "Turn on video" : "Turn off video"}
+                  >
+                    <i className={`fas fa-${isVideoOff ? 'video-slash' : 'video'}`}></i>
+                  </button>
+                  <button 
+                    className="video-control-btn end-call" 
+                    onClick={endCall}
+                    disabled={!isInCall}
+                    title="End call"
+                  >
+                    <i className="fas fa-phone-slash"></i>
+                  </button>
+                </div>
+              </div>
+              
+              <div className="sidebar">
+                <div className="room-controls">
+                  <div className="room-id-display">
+                    <label>Room ID:</label>
+                    <div className="room-id-container">
+                      <span id="roomId">Not created</span>
+                      <button 
+                        className="copy-btn" 
+                        onClick={copyRoomId} 
+                        disabled={!roomId}
+                        title="Copy Room ID"
+                      >
+                        <i className="fas fa-copy"></i>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="join-room-section">
+                    <input 
+                      type="text" 
+                      placeholder="Enter Room ID to join" 
+                      className="join-room-input" 
+                      value={joinRoomId}
+                      onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
+                      disabled={isInCall}
+                    />
+                    <button 
+                      className="join-room-btn" 
+                      onClick={joinRoom}
+                      disabled={isInCall || !joinRoomId.trim()}
+                    >
+                      <i className="fas fa-sign-in-alt"></i> Join Room
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="language-section">
+                  <label>Language Translation:</label>
+                  <select 
+                    className="language-dropdown"
+                    value={videoCallLanguage}
+                    onChange={(e) => setVideoCallLanguage(e.target.value)}
+                  >
+                    <option value="en-IN">English</option>
+                    <option value="hi-IN">हिंदी (Hindi)</option>
+                    <option value="te-IN">తెलుగు (Telugu)</option>
+                    <option value="es-ES">Español (Spanish)</option>
+                    <option value="fr-FR">Français (French)</option>
+                    <option value="de-DE">Deutsch (German)</option>
+                    <option value="it-IT">Italiano (Italian)</option>
+                    <option value="pt-PT">Português (Portuguese)</option>
+                    <option value="ru-RU">Русский (Russian)</option>
+                    <option value="ja-JP">日本語 (Japanese)</option>
+                    <option value="ko-KR">한국어 (Korean)</option>
+                    <option value="zh-CN">中文 (Chinese)</option>
+                    <option value="ar-SA">العربية (Arabic)</option>
+                  </select>
+                  
+                  <button 
+                    className={`join-room-btn ${isTranslationActive ? 'translation-active' : ''}`}
+                    onClick={toggleTranslation}
+                    disabled={!isInCall}
+                    style={{ 
+                      marginTop: '1rem',
+                      background: isTranslationActive ? 
+                        'linear-gradient(135deg, #00c851, #007e33)' : 
+                        'linear-gradient(135deg, #667eea, #764ba2)'
+                    }}
+                  >
+                    <i className={`fas fa-${isTranslationActive ? 'stop' : 'language'}`}></i>
+                    {isTranslationActive ? 'Stop Translation' : 'Start Live Translation'}
+                  </button>
+                </div>
+                
+                <div className="translation-display">
+                  <h4>Live Translation:</h4>
+                  <div className="translation-text">
+                    {liveTranslation || (isInCall ? 
+                      'Speak during the call to see live translations' : 
+                      'Translation will appear here during the call')}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         ) : currentMode === 'video' ? (
           // Video Mode UI

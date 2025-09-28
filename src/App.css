@@ -523,6 +523,376 @@
   box-shadow: 0 5px 15px rgba(67, 97, 238, 0.3);
 }
 
+/* VIDEO CALL MODE STYLES */
+.videocall-mode {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.videocall-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--card-bg);
+  border-radius: 15px;
+  box-shadow: var(--shadow);
+}
+
+.vox-nova-title {
+  font-size: 3rem;
+  font-weight: 700;
+  background: var(--highlight-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.user-info {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.name-input, .location-input, .join-room-input {
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  width: 200px;
+  transition: var(--transition);
+}
+
+.name-input:focus, .location-input:focus, .join-room-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+}
+
+.create-room-btn, .join-room-btn {
+  padding: 0.75rem 1.5rem;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.create-room-btn {
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+}
+
+.create-room-btn:hover {
+  background: linear-gradient(135deg, #ff8f5a, #ff6b35);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.3);
+}
+
+.join-room-btn {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.join-room-btn:hover {
+  background: linear-gradient(135deg, #7c8df8, #667eea);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+.copy-btn {
+  padding: 0.5rem;
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.copy-btn:hover {
+  background: linear-gradient(135deg, #6fc3ff, #4facfe);
+  transform: scale(1.05);
+}
+
+.videocall-main {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 2rem;
+  min-height: 600px;
+}
+
+.video-section {
+  background: var(--card-bg);
+  border-radius: 15px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.main-video-screen {
+  position: relative;
+  width: 100%;
+  height: 450px;
+  background: #1a1a1a;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.main-video-screen video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#localVideo {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 150px;
+  height: 100px;
+  border-radius: 8px;
+  border: 2px solid white;
+  z-index: 10;
+}
+
+#remoteVideo {
+  width: 100%;
+  height: 100%;
+}
+
+.video-placeholder {
+  color: #888;
+  text-align: center;
+}
+
+.video-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.video-controls {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.video-control-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  color: white;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.video-control-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.3));
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.video-control-btn:hover::before {
+  opacity: 1;
+}
+
+/* Microphone button - green gradient */
+.video-control-btn:nth-child(1) {
+  background: linear-gradient(135deg, #00c851, #007e33);
+}
+
+.video-control-btn:nth-child(1):hover {
+  background: linear-gradient(135deg, #00ff5f, #00c851);
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(0, 200, 81, 0.4);
+}
+
+/* Video button - blue gradient */
+.video-control-btn:nth-child(2) {
+  background: linear-gradient(135deg, #1e88e5, #0d47a1);
+}
+
+.video-control-btn:nth-child(2):hover {
+  background: linear-gradient(135deg, #42a5f5, #1e88e5);
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(30, 136, 229, 0.4);
+}
+
+/* End call button - red gradient */
+.video-control-btn.end-call {
+  background: linear-gradient(135deg, #ff6b6b, #d32f2f);
+}
+
+.video-control-btn.end-call:hover {
+  background: linear-gradient(135deg, #ff8a80, #ff6b6b);
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+}
+
+.sidebar {
+  background: var(--card-bg);
+  border-radius: 15px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.room-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.room-id-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.room-id-display label {
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.room-id-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+#roomId {
+  flex: 1;
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.copy-btn {
+  padding: 0.5rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.copy-btn:hover {
+  background: var(--secondary-color);
+}
+
+.join-room-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.language-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.language-section label {
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.language-dropdown {
+  padding: 0.75rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.language-dropdown:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+}
+
+.translation-display {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+}
+
+.translation-display h4 {
+  margin-bottom: 0.5rem;
+  color: var(--primary-color);
+}
+
+.translation-text {
+  min-height: 100px;
+  padding: 1rem;
+  background: white;
+  border-radius: 8px;
+  color: #666;
+  font-style: italic;
+  border: 1px solid var(--border-color);
+}
+
+/* Responsive design for video call */
+@media (max-width: 1024px) {
+  .videocall-main {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .sidebar {
+    order: -1;
+  }
+  
+  .user-info {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .name-input, .location-input {
+    width: 100%;
+  }
+}
+
 .wave {
   position: absolute;
   border: 2px solid var(--accent-color);
