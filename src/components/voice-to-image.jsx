@@ -66,6 +66,10 @@ const VoiceToImage = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [mainVideoView, setMainVideoView] = useState('remote'); // 'local' or 'remote'
   
+  // Video element refs for reactive stream binding
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  
   // Notification and participant states
   const [notifications, setNotifications] = useState([]);
   const [connectedParticipants, setConnectedParticipants] = useState([]);
@@ -103,6 +107,50 @@ const VoiceToImage = () => {
       }
     }
   }, []);
+
+  // Reactive video stream binding
+  useEffect(() => {
+    if (localStream && localVideoRef.current) {
+      console.log('Binding local stream to video element');
+      localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.muted = true; // Always mute local video to prevent feedback
+      localVideoRef.current.play().catch(e => console.log('Local video play failed:', e));
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteStream && remoteVideoRef.current) {
+      console.log('Binding remote stream to video element');
+      const video = remoteVideoRef.current;
+      video.srcObject = remoteStream;
+      video.muted = true; // Start muted to allow autoplay, user can unmute
+      video.autoplay = true;
+      video.playsInline = true;
+      
+      // Style the video properly
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'cover';
+      
+      // Attempt to play with better error handling
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          console.log('Remote video playing successfully (muted)');
+          showNotification('Connected! Click video to unmute audio', 'success');
+        }).catch(e => {
+          console.log('Remote video autoplay prevented:', e);
+          showNotification('Click video to start playback', 'info');
+        });
+      }
+      
+      // Hide placeholder when remote video is connected
+      const placeholder = document.querySelector('.video-placeholder');
+      if (placeholder) {
+        placeholder.style.display = 'none';
+      }
+    }
+  }, [remoteStream]);
 
   // Enhanced pause detection for saga and video modes with improved timing
   useEffect(() => {
@@ -1191,38 +1239,14 @@ const VoiceToImage = () => {
           sampleRate: 44100
         }
       });
-      setLocalStream(stream);
-      
-      const localVideo = document.getElementById('localVideo');
-      if (localVideo) {
-        localVideo.srcObject = stream;
-        localVideo.volume = 0; // Keep local video muted to prevent feedback
-        localVideo.muted = true;
-        
-        // Ensure video plays immediately
-        localVideo.onloadedmetadata = () => {
-          console.log('Local video metadata loaded, dimensions:', localVideo.videoWidth, 'x', localVideo.videoHeight);
-          localVideo.play().catch(e => {
-            console.log('Local video autoplay prevented:', e);
-            // Try to play after user interaction
-            document.addEventListener('click', () => {
-              localVideo.play().catch(err => console.log('Manual play failed:', err));
-            }, { once: true });
-          });
-        };
-        
-        // Force immediate play attempt
-        setTimeout(() => {
-          if (localVideo.paused) {
-            localVideo.play().catch(e => console.log('Delayed autoplay prevented:', e));
-          }
-        }, 100);
-      }
       
       console.log('Local video setup complete with tracks:', {
         video: stream.getVideoTracks().map(track => ({ label: track.label, enabled: track.enabled })),
         audio: stream.getAudioTracks().map(track => ({ label: track.label, enabled: track.enabled }))
       });
+      
+      // Set the local stream - useEffect will handle the actual video binding
+      setLocalStream(stream);
       return stream;
     } catch (error) {
       console.error('Error accessing media devices:', error);
@@ -1234,46 +1258,23 @@ const VoiceToImage = () => {
   const setupRemoteVideo = (stream) => {
     console.log('Setting up remote video with stream:', stream);
     console.log('Remote stream tracks:', {
-      video: stream.getVideoTracks().map(track => ({ label: track.label, enabled: track.enabled })),
-      audio: stream.getAudioTracks().map(track => ({ label: track.label, enabled: track.enabled }))
+      video: stream.getVideoTracks().map(track => ({ label: track.label, enabled: track.enabled, readyState: track.readyState })),
+      audio: stream.getAudioTracks().map(track => ({ label: track.label, enabled: track.enabled, readyState: track.readyState }))
     });
     
-    setRemoteStream(stream);
-    const remoteVideo = document.getElementById('remoteVideo');
-    if (remoteVideo) {
-      remoteVideo.srcObject = stream;
-      remoteVideo.volume = 1; // Enable audio for remote video
-      remoteVideo.muted = false; // Allow remote audio
-      
-      remoteVideo.onloadedmetadata = () => {
-        console.log('Remote video metadata loaded, dimensions:', remoteVideo.videoWidth, 'x', remoteVideo.videoHeight);
-        remoteVideo.play().catch(e => {
-          console.log('Remote video autoplay prevented:', e);
-          // Try to play after user interaction
-          document.addEventListener('click', () => {
-            remoteVideo.play().catch(err => console.log('Remote manual play failed:', err));
-          }, { once: true });
-        });
-      };
-      
-      // Force immediate play attempt
-      setTimeout(() => {
-        if (remoteVideo.paused) {
-          console.log('Attempting to play remote video...');
-          remoteVideo.play().catch(e => console.log('Remote delayed autoplay prevented:', e));
-        }
-      }, 100);
+    // Verify stream is active
+    if (!stream || stream.getTracks().length === 0) {
+      console.error('Invalid remote stream received');
+      showNotification('Invalid remote video stream', 'error');
+      return;
     }
     
-    // Hide placeholder when remote video is connected
-    const placeholder = document.querySelector('.video-placeholder');
-    if (placeholder) {
-      placeholder.style.display = 'none';
-    }
+    // Set the remote stream - useEffect will handle the actual video binding
+    setRemoteStream(stream);
     
     // Set initial video layout to show remote video as main
     setMainVideoView('remote');
-    console.log('Remote video setup complete');
+    console.log('Remote video setup initiated - stream will bind via useEffect');
   };
   
   // Video layout switching function
@@ -1281,8 +1282,8 @@ const VoiceToImage = () => {
     const currentView = mainVideoView;
     setMainVideoView(currentView === 'remote' ? 'local' : 'remote');
     
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
+    const localVideo = localVideoRef.current;
+    const remoteVideo = remoteVideoRef.current;
     
     if (localVideo && remoteVideo) {
       if (currentView === 'remote') {
@@ -1474,12 +1475,38 @@ const VoiceToImage = () => {
           setIsInCall(true);
 
           call.on('stream', (remoteStream) => {
-            console.log('Host receiving remote stream from joiner:', call.peer);
-            console.log('Remote stream tracks:', {
-              video: remoteStream.getVideoTracks().length,
-              audio: remoteStream.getAudioTracks().length
+            console.log('🎥 Host receiving remote stream from joiner:', call.peer);
+            console.log('Host remote stream details:', {
+              id: remoteStream.id,
+              active: remoteStream.active,
+              videoTracks: remoteStream.getVideoTracks().length,
+              audioTracks: remoteStream.getAudioTracks().length,
+              tracks: remoteStream.getTracks().map(track => ({
+                kind: track.kind,
+                label: track.label,
+                enabled: track.enabled,
+                readyState: track.readyState
+              }))
             });
+            
+            // Verify we have video tracks
+            if (remoteStream.getVideoTracks().length === 0) {
+              console.error('No video tracks in joiner stream!');
+              showNotification('No video received from joiner', 'error');
+              return;
+            }
+            
+            // Ensure video elements exist before setting up
+            const remoteVideo = document.getElementById('remoteVideo');
+            if (!remoteVideo) {
+              console.error('Remote video element not found!');
+              showNotification('Video interface not ready', 'error');
+              return;
+            }
+            
+            console.log('Host setting up remote video from joiner...');
             setupRemoteVideo(remoteStream);
+            showNotification(`${call.metadata?.userName || 'Guest'} connected! You can now see each other`, 'success');
           });
 
           call.on('close', () => {
@@ -1586,13 +1613,37 @@ const VoiceToImage = () => {
           console.log('Call initiated successfully with metadata:', call.metadata);
 
           call.on('stream', (remoteStream) => {
-            console.log('Joiner receiving remote stream from host');
-            console.log('Remote stream tracks received:', {
-              video: remoteStream.getVideoTracks().length,
-              audio: remoteStream.getAudioTracks().length
+            console.log('🎥 Joiner receiving remote stream from host');
+            console.log('Remote stream details:', {
+              id: remoteStream.id,
+              active: remoteStream.active,
+              videoTracks: remoteStream.getVideoTracks().length,
+              audioTracks: remoteStream.getAudioTracks().length,
+              tracks: remoteStream.getTracks().map(track => ({
+                kind: track.kind,
+                label: track.label,
+                enabled: track.enabled,
+                readyState: track.readyState
+              }))
             });
+            
+            // Verify we have video tracks
+            if (remoteStream.getVideoTracks().length === 0) {
+              console.error('No video tracks in remote stream!');
+              showNotification('No video received from host', 'error');
+              return;
+            }
+            
+            // Ensure video elements exist before setting up
+            if (!remoteVideoRef.current) {
+              console.error('Remote video element not found!');
+              showNotification('Video interface not ready', 'error');
+              return;
+            }
+            
+            console.log('Setting up remote video from host...');
             setupRemoteVideo(remoteStream);
-            showNotification(`Successfully connected to the room!`, 'success');
+            showNotification(`Successfully connected! You can now see each other`, 'success');
           });
 
           call.on('close', () => {
@@ -1685,16 +1736,14 @@ const VoiceToImage = () => {
       placeholder.style.display = 'flex';
     }
     
-    // Clear video elements and reset their styles
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    if (localVideo) {
-      localVideo.srcObject = null;
-      localVideo.style.cssText = '';
+    // Clear video elements and reset their styles using refs
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+      localVideoRef.current.style.cssText = '';
     }
-    if (remoteVideo) {
-      remoteVideo.srcObject = null;
-      remoteVideo.style.cssText = '';
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+      remoteVideoRef.current.style.cssText = '';
     }
     
     // Exit fullscreen if active
@@ -2390,6 +2439,7 @@ const VoiceToImage = () => {
               <div className="video-section">
                 <div className="main-video-screen">
                   <video 
+                    ref={localVideoRef}
                     id="localVideo" 
                     autoPlay 
                     muted 
@@ -2400,13 +2450,24 @@ const VoiceToImage = () => {
                     title="Click to switch view"
                   ></video>
                   <video 
+                    ref={remoteVideoRef}
                     id="remoteVideo" 
                     autoPlay 
                     playsInline
                     webkit-playsinline="true"
-                    onClick={switchVideoLayout}
+                    onClick={(e) => {
+                      // Handle unmuting on click
+                      if (e.target.muted) {
+                        e.target.muted = false;
+                        e.target.volume = 1;
+                        showNotification('Remote audio unmuted!', 'success');
+                      } else {
+                        // Allow video switching as normal
+                        switchVideoLayout();
+                      }
+                    }}
                     style={{cursor: 'pointer'}}
-                    title="Click to switch view"
+                    title="Click to unmute audio or switch view"
                   ></video>
                   <div className="video-placeholder">
                     <i className="fas fa-video video-icon"></i>
@@ -2526,7 +2587,8 @@ const VoiceToImage = () => {
                     <button 
                       className="join-room-btn" 
                       onClick={joinRoom}
-                      disabled={isInCall || !joinRoomId.trim()}
+                      disabled={isInCall || !joinRoomId.trim() || !userName.trim() || !userLocation.trim()}
+                      title={!userName.trim() || !userLocation.trim() ? "Please enter your name and location" : "Join the room"}
                     >
                       <i className="fas fa-sign-in-alt"></i> Join Room
                     </button>
