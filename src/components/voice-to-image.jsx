@@ -1175,6 +1175,7 @@ const VoiceToImage = () => {
   // Enhanced media stream setup
   const setupLocalVideo = async () => {
     try {
+      console.log('Setting up local video...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           width: { ideal: 1280 },
@@ -1193,27 +1194,97 @@ const VoiceToImage = () => {
       if (localVideo) {
         localVideo.srcObject = stream;
         localVideo.volume = 0; // Keep local video muted to prevent feedback
+        localVideo.muted = true;
+        
+        // Ensure video plays immediately
+        localVideo.onloadedmetadata = () => {
+          console.log('Local video metadata loaded');
+          localVideo.play().catch(e => {
+            console.log('Local video autoplay prevented:', e);
+            // Try to play after user interaction
+            document.addEventListener('click', () => {
+              localVideo.play().catch(err => console.log('Manual play failed:', err));
+            }, { once: true });
+          });
+        };
+        
+        // Force immediate play attempt
+        setTimeout(() => {
+          if (localVideo.paused) {
+            localVideo.play().catch(e => console.log('Delayed autoplay prevented:', e));
+          }
+        }, 100);
       }
       
+      console.log('Local video setup complete');
       return stream;
     } catch (error) {
       console.error('Error accessing media devices:', error);
+      showNotification('Camera/microphone access denied. Please allow permissions and try again.', 'error');
       throw error;
     }
   };
 
   const setupRemoteVideo = (stream) => {
+    console.log('Setting up remote video with stream:', stream);
     setRemoteStream(stream);
     const remoteVideo = document.getElementById('remoteVideo');
     if (remoteVideo) {
       remoteVideo.srcObject = stream;
       remoteVideo.volume = 1; // Enable audio for remote video
+      remoteVideo.onloadedmetadata = () => {
+        console.log('Remote video metadata loaded');
+        remoteVideo.play().catch(e => console.log('Remote video autoplay prevented:', e));
+      };
     }
     
     // Hide placeholder when remote video is connected
     const placeholder = document.querySelector('.video-placeholder');
     if (placeholder) {
       placeholder.style.display = 'none';
+    }
+  };
+  
+  // Video layout switching function
+  const switchVideoLayout = () => {
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    
+    if (localVideo && remoteVideo) {
+      // Toggle between small and large view
+      const isLocalSmall = localVideo.style.position === 'absolute';
+      
+      if (isLocalSmall) {
+        // Make local video large, remote video small
+        localVideo.style.position = 'static';
+        localVideo.style.width = '100%';
+        localVideo.style.height = '100%';
+        localVideo.style.top = 'auto';
+        localVideo.style.right = 'auto';
+        localVideo.style.zIndex = '1';
+        
+        remoteVideo.style.position = 'absolute';
+        remoteVideo.style.width = '150px';
+        remoteVideo.style.height = '100px';
+        remoteVideo.style.top = '10px';
+        remoteVideo.style.right = '10px';
+        remoteVideo.style.zIndex = '10';
+      } else {
+        // Make remote video large, local video small
+        remoteVideo.style.position = 'static';
+        remoteVideo.style.width = '100%';
+        remoteVideo.style.height = '100%';
+        remoteVideo.style.top = 'auto';
+        remoteVideo.style.right = 'auto';
+        remoteVideo.style.zIndex = '1';
+        
+        localVideo.style.position = 'absolute';
+        localVideo.style.width = '150px';
+        localVideo.style.height = '100px';
+        localVideo.style.top = '10px';
+        localVideo.style.right = '10px';
+        localVideo.style.zIndex = '10';
+      }
     }
   };
 
@@ -1250,38 +1321,47 @@ const VoiceToImage = () => {
       });
 
       newPeer.on('call', async (call) => {
-        console.log('Receiving call...');
+        console.log('Receiving call from:', call.peer);
+        console.log('Call metadata:', call.metadata);
         
         try {
+          // Extract user info from call metadata if available
+          if (call.metadata && call.metadata.userName && call.metadata.userLocation) {
+            const joinerInfo = {
+              userName: call.metadata.userName,
+              userLocation: call.metadata.userLocation
+            };
+            setRemoteUserInfo(joinerInfo);
+            showUserJoinedNotification(joinerInfo.userName, joinerInfo.userLocation);
+            
+            // Add to participants list
+            const newParticipant = { 
+              name: joinerInfo.userName, 
+              location: joinerInfo.userLocation, 
+              role: 'guest',
+              id: call.peer
+            };
+            setConnectedParticipants(prev => [...prev, newParticipant]);
+          }
+          
           // Answer the call with our stream
           call.answer(stream);
           setCurrentCall(call);
           setIsInCall(true);
 
-          // Listen for incoming call metadata
-          call.on('data', (data) => {
-            if (data && data.userName && data.userLocation) {
-              setRemoteUserInfo(data);
-              showUserJoinedNotification(data.userName, data.userLocation);
-              
-              // Add to participants list
-              const newParticipant = { 
-                name: data.userName, 
-                location: data.userLocation, 
-                role: 'guest',
-                id: call.peer
-              };
-              setConnectedParticipants(prev => [...prev, newParticipant]);
-            }
-          });
-
           call.on('stream', (remoteStream) => {
-            console.log('Receiving remote stream');
+            console.log('Receiving remote stream from:', call.peer);
             setupRemoteVideo(remoteStream);
           });
 
           call.on('close', () => {
+            console.log('Call closed by remote peer');
             endCall();
+          });
+          
+          call.on('error', (err) => {
+            console.error('Call error:', err);
+            showNotification('Call error: ' + err.message, 'error');
           });
 
         } catch (error) {
@@ -1336,30 +1416,19 @@ const VoiceToImage = () => {
         
         try {
           // Call the room with metadata about this user
+          console.log('Calling room with user info:', { userName, userLocation });
           const call = newPeer.call(joinRoomId.trim(), stream, {
             metadata: {
               userName: userName,
               userLocation: userLocation,
-              joinedAt: new Date().toISOString()
+              joinedAt: new Date().toISOString(),
+              role: 'guest'
             }
           });
           setCurrentCall(call);
           setIsInCall(true);
           
-          // Send user information after call is established
-          setTimeout(() => {
-            if (call && call.peerConnection) {
-              try {
-                call.send && call.send({
-                  userName: userName,
-                  userLocation: userLocation,
-                  type: 'userInfo'
-                });
-              } catch (err) {
-                console.log('Could not send user info via data channel:', err);
-              }
-            }
-          }, 1000);
+          console.log('Call initiated with metadata:', call.metadata);
 
           call.on('stream', (remoteStream) => {
             console.log('Receiving remote stream');
@@ -2136,11 +2205,27 @@ const VoiceToImage = () => {
             <div className="videocall-main">
               <div className="video-section">
                 <div className="main-video-screen">
-                  <video id="localVideo" autoPlay muted playsInline></video>
-                  <video id="remoteVideo" autoPlay playsInline></video>
+                  <video 
+                    id="localVideo" 
+                    autoPlay 
+                    muted 
+                    playsInline
+                    onClick={switchVideoLayout}
+                    style={{cursor: 'pointer'}}
+                    title="Click to switch view"
+                  ></video>
+                  <video 
+                    id="remoteVideo" 
+                    autoPlay 
+                    playsInline
+                    onClick={switchVideoLayout}
+                    style={{cursor: 'pointer'}}
+                    title="Click to switch view"
+                  ></video>
                   <div className="video-placeholder">
                     <i className="fas fa-video video-icon"></i>
                     <p>Video call will appear here</p>
+                    <p style={{fontSize: '0.9rem', marginTop: '1rem', color: '#666'}}>Click videos to switch between large and small view</p>
                   </div>
                 </div>
                 
