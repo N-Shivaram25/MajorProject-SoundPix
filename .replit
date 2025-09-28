@@ -5,7 +5,9 @@ modules = ["nodejs-20", "web"]
 channel = "stable-25_05"
 
 [deployment]
-run = ["sh", "-c", "npm run start"]
+run = ["npx", "serve", "-s", "build"]
+deploymentTarget = "autoscale"
+build = ["npm", "run", "build"]
 
 [workflows]
 runButton = "Project"

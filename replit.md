@@ -6,6 +6,21 @@ This is a Voice-to-Image Generator application built with React that transforms 
 
 Preferred communication style: Simple, everyday language.
 
+# Recent Changes
+
+## September 28, 2025 - Project Import Setup
+- Successfully imported GitHub project to Replit environment
+- Installed all Node.js dependencies (React 19.1.0, react-speech-recognition, peerjs, socket.io-client, etc.)
+- Configured React development server for Replit environment:
+  - Set HOST=0.0.0.0 and PORT=5000
+  - Enabled DANGEROUSLY_DISABLE_HOST_CHECK=true for iframe compatibility
+  - Configured workflow for React Server with webview output
+- Set up deployment configuration:
+  - Target: autoscale (suitable for frontend applications)
+  - Build: npm run build
+  - Run: npx serve -s build
+- Application is fully functional and accessible via Replit preview
+
 # System Architecture
 
 ## Frontend Architecture
