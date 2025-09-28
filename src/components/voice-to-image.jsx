@@ -1300,14 +1300,26 @@ const VoiceToImage = () => {
     }
 
     try {
-      // Setup local video first
+      // Setup local video first and store in state
       const stream = await setupLocalVideo();
+      console.log('Local stream created:', stream);
+      console.log('Stream tracks:', {
+        video: stream.getVideoTracks().length,
+        audio: stream.getAudioTracks().length
+      });
       
       const newRoomId = generateRoomId();
       setRoomId(newRoomId);
       
-      // Initialize PeerJS
-      const newPeer = new Peer(newRoomId);
+      // Initialize PeerJS with STUN servers for better connectivity
+      const newPeer = new Peer(newRoomId, {
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
       setPeer(newPeer);
       
       // Add current user to participants
@@ -1317,12 +1329,14 @@ const VoiceToImage = () => {
 
       newPeer.on('open', (id) => {
         console.log('Room created with ID:', id);
+        console.log('Peer connection established');
         document.getElementById('roomId').textContent = id;
       });
 
       newPeer.on('call', async (call) => {
         console.log('Receiving call from:', call.peer);
         console.log('Call metadata:', call.metadata);
+        console.log('Answering with stream:', stream);
         
         try {
           // Extract user info from call metadata if available
@@ -1344,13 +1358,25 @@ const VoiceToImage = () => {
             setConnectedParticipants(prev => [...prev, newParticipant]);
           }
           
+          // Verify stream before answering
+          if (!stream || stream.getTracks().length === 0) {
+            console.error('No stream available to answer call');
+            showNotification('Unable to establish video connection - no local stream', 'error');
+            return;
+          }
+          
           // Answer the call with our stream
+          console.log('Answering call with stream tracks:', stream.getTracks().length);
           call.answer(stream);
           setCurrentCall(call);
           setIsInCall(true);
 
           call.on('stream', (remoteStream) => {
-            console.log('Receiving remote stream from:', call.peer);
+            console.log('Host receiving remote stream from joiner:', call.peer);
+            console.log('Remote stream tracks:', {
+              video: remoteStream.getVideoTracks().length,
+              audio: remoteStream.getAudioTracks().length
+            });
             setupRemoteVideo(remoteStream);
           });
 
@@ -1373,6 +1399,11 @@ const VoiceToImage = () => {
       newPeer.on('error', (error) => {
         console.error('PeerJS error:', error);
         showNotification('Connection error: ' + error.message, 'error');
+      });
+
+      newPeer.on('disconnected', () => {
+        console.log('Peer disconnected, attempting to reconnect...');
+        newPeer.reconnect();
       });
 
     } catch (error) {
@@ -1398,12 +1429,24 @@ const VoiceToImage = () => {
     }
 
     try {
-      // Setup local video first
+      // Setup local video first and store in state
       const stream = await setupLocalVideo();
+      console.log('Joiner local stream created:', stream);
+      console.log('Joiner stream tracks:', {
+        video: stream.getVideoTracks().length,
+        audio: stream.getAudioTracks().length
+      });
       
-      // Initialize PeerJS with random ID for joiner
+      // Initialize PeerJS with random ID for joiner and STUN servers
       const joinerId = generateRoomId() + '_joiner';
-      const newPeer = new Peer(joinerId);
+      const newPeer = new Peer(joinerId, {
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
       setPeer(newPeer);
       
       // Add current user to participants
@@ -1412,11 +1455,21 @@ const VoiceToImage = () => {
       showNotification(`Joining room as ${userName} from ${userLocation}...`, 'info');
 
       newPeer.on('open', async () => {
-        console.log('Connected as:', joinerId);
+        console.log('Joiner connected as:', joinerId);
+        console.log('Attempting to call room:', joinRoomId.trim());
         
         try {
+          // Verify stream before calling
+          if (!stream || stream.getTracks().length === 0) {
+            console.error('No stream available to make call');
+            showNotification('Unable to establish video connection - no local stream', 'error');
+            return;
+          }
+          
           // Call the room with metadata about this user
-          console.log('Calling room with user info:', { userName, userLocation });
+          console.log('Calling room with user info and stream:', { userName, userLocation });
+          console.log('Calling with stream tracks:', stream.getTracks().length);
+          
           const call = newPeer.call(joinRoomId.trim(), stream, {
             metadata: {
               userName: userName,
@@ -1428,15 +1481,20 @@ const VoiceToImage = () => {
           setCurrentCall(call);
           setIsInCall(true);
           
-          console.log('Call initiated with metadata:', call.metadata);
+          console.log('Call initiated successfully with metadata:', call.metadata);
 
           call.on('stream', (remoteStream) => {
-            console.log('Receiving remote stream');
+            console.log('Joiner receiving remote stream from host');
+            console.log('Remote stream tracks received:', {
+              video: remoteStream.getVideoTracks().length,
+              audio: remoteStream.getAudioTracks().length
+            });
             setupRemoteVideo(remoteStream);
             showNotification(`Successfully connected to the room!`, 'success');
           });
 
           call.on('close', () => {
+            console.log('Call closed');
             endCall();
           });
           
