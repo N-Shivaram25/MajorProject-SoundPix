@@ -62,6 +62,11 @@ const VoiceToImage = () => {
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isTranslationActive, setIsTranslationActive] = useState(false);
   const [translationRecognition, setTranslationRecognition] = useState(null);
+  
+  // Notification and participant states
+  const [notifications, setNotifications] = useState([]);
+  const [connectedParticipants, setConnectedParticipants] = useState([]);
+  const [remoteUserInfo, setRemoteUserInfo] = useState(null);
 
   const { transcript, finalTranscript: speechFinalTranscript, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition({
     transcribing: true,
@@ -1146,19 +1151,98 @@ const VoiceToImage = () => {
     return result;
   };
 
+  // Notification functions
+  const showNotification = (message, type = 'info', duration = 5000) => {
+    const notification = {
+      id: Date.now(),
+      message,
+      type,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    setNotifications(prev => [...prev, notification]);
+    
+    // Auto-remove notification after duration
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    }, duration);
+  };
+
+  const showUserJoinedNotification = (name, location) => {
+    const message = `${name} joined from ${location}`;
+    showNotification(message, 'join', 7000);
+  };
+
+  // Enhanced media stream setup
+  const setupLocalVideo = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        }, 
+        audio: { 
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
+      });
+      setLocalStream(stream);
+      
+      const localVideo = document.getElementById('localVideo');
+      if (localVideo) {
+        localVideo.srcObject = stream;
+        localVideo.volume = 0; // Keep local video muted to prevent feedback
+      }
+      
+      return stream;
+    } catch (error) {
+      console.error('Error accessing media devices:', error);
+      throw error;
+    }
+  };
+
+  const setupRemoteVideo = (stream) => {
+    setRemoteStream(stream);
+    const remoteVideo = document.getElementById('remoteVideo');
+    if (remoteVideo) {
+      remoteVideo.srcObject = stream;
+      remoteVideo.volume = 1; // Enable audio for remote video
+    }
+    
+    // Hide placeholder when remote video is connected
+    const placeholder = document.querySelector('.video-placeholder');
+    if (placeholder) {
+      placeholder.style.display = 'none';
+    }
+  };
+
   const createRoom = async () => {
     if (!userName.trim()) {
       alert('Please enter your name first');
       return;
     }
+    
+    if (!userLocation.trim()) {
+      alert('Please enter your location');
+      return;
+    }
 
     try {
+      // Setup local video first
+      const stream = await setupLocalVideo();
+      
       const newRoomId = generateRoomId();
       setRoomId(newRoomId);
       
       // Initialize PeerJS
       const newPeer = new Peer(newRoomId);
       setPeer(newPeer);
+      
+      // Add current user to participants
+      const currentUser = { name: userName, location: userLocation, role: 'host', id: newRoomId };
+      setConnectedParticipants([currentUser]);
+      showNotification(`Room created! You are hosting as ${userName} from ${userLocation}`, 'success');
 
       newPeer.on('open', (id) => {
         console.log('Room created with ID:', id);
@@ -1169,34 +1253,31 @@ const VoiceToImage = () => {
         console.log('Receiving call...');
         
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: true 
-          });
-          setLocalStream(stream);
-          
-          const localVideo = document.getElementById('localVideo');
-          if (localVideo) {
-            localVideo.srcObject = stream;
-          }
-
+          // Answer the call with our stream
           call.answer(stream);
           setCurrentCall(call);
           setIsInCall(true);
 
+          // Listen for incoming call metadata
+          call.on('data', (data) => {
+            if (data && data.userName && data.userLocation) {
+              setRemoteUserInfo(data);
+              showUserJoinedNotification(data.userName, data.userLocation);
+              
+              // Add to participants list
+              const newParticipant = { 
+                name: data.userName, 
+                location: data.userLocation, 
+                role: 'guest',
+                id: call.peer
+              };
+              setConnectedParticipants(prev => [...prev, newParticipant]);
+            }
+          });
+
           call.on('stream', (remoteStream) => {
             console.log('Receiving remote stream');
-            setRemoteStream(remoteStream);
-            const remoteVideo = document.getElementById('remoteVideo');
-            if (remoteVideo) {
-              remoteVideo.srcObject = remoteStream;
-            }
-            
-            // Hide placeholder
-            const placeholder = document.querySelector('.video-placeholder');
-            if (placeholder) {
-              placeholder.style.display = 'none';
-            }
+            setupRemoteVideo(remoteStream);
           });
 
           call.on('close', () => {
@@ -1204,19 +1285,19 @@ const VoiceToImage = () => {
           });
 
         } catch (error) {
-          console.error('Error accessing media devices:', error);
-          alert('Could not access camera/microphone. Please check permissions.');
+          console.error('Error handling incoming call:', error);
+          showNotification('Failed to establish video connection', 'error');
         }
       });
 
       newPeer.on('error', (error) => {
         console.error('PeerJS error:', error);
-        alert('Connection error: ' + error.message);
+        showNotification('Connection error: ' + error.message, 'error');
       });
 
     } catch (error) {
       console.error('Error creating room:', error);
-      alert('Failed to create room: ' + error.message);
+      showNotification('Failed to create room: ' + error.message, 'error');
     }
   };
 
@@ -1230,66 +1311,85 @@ const VoiceToImage = () => {
       alert('Please enter your name first');
       return;
     }
+    
+    if (!userLocation.trim()) {
+      alert('Please enter your location');
+      return;
+    }
 
     try {
+      // Setup local video first
+      const stream = await setupLocalVideo();
+      
       // Initialize PeerJS with random ID for joiner
       const joinerId = generateRoomId() + '_joiner';
       const newPeer = new Peer(joinerId);
       setPeer(newPeer);
+      
+      // Add current user to participants
+      const currentUser = { name: userName, location: userLocation, role: 'guest', id: joinerId };
+      setConnectedParticipants([currentUser]);
+      showNotification(`Joining room as ${userName} from ${userLocation}...`, 'info');
 
       newPeer.on('open', async () => {
         console.log('Connected as:', joinerId);
         
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: true 
+          // Call the room with metadata about this user
+          const call = newPeer.call(joinRoomId.trim(), stream, {
+            metadata: {
+              userName: userName,
+              userLocation: userLocation,
+              joinedAt: new Date().toISOString()
+            }
           });
-          setLocalStream(stream);
-          
-          const localVideo = document.getElementById('localVideo');
-          if (localVideo) {
-            localVideo.srcObject = stream;
-          }
-
-          // Call the room
-          const call = newPeer.call(joinRoomId.trim(), stream);
           setCurrentCall(call);
           setIsInCall(true);
+          
+          // Send user information after call is established
+          setTimeout(() => {
+            if (call && call.peerConnection) {
+              try {
+                call.send && call.send({
+                  userName: userName,
+                  userLocation: userLocation,
+                  type: 'userInfo'
+                });
+              } catch (err) {
+                console.log('Could not send user info via data channel:', err);
+              }
+            }
+          }, 1000);
 
           call.on('stream', (remoteStream) => {
             console.log('Receiving remote stream');
-            setRemoteStream(remoteStream);
-            const remoteVideo = document.getElementById('remoteVideo');
-            if (remoteVideo) {
-              remoteVideo.srcObject = remoteStream;
-            }
-            
-            // Hide placeholder
-            const placeholder = document.querySelector('.video-placeholder');
-            if (placeholder) {
-              placeholder.style.display = 'none';
-            }
+            setupRemoteVideo(remoteStream);
+            showNotification(`Successfully connected to the room!`, 'success');
           });
 
           call.on('close', () => {
             endCall();
           });
+          
+          call.on('error', (err) => {
+            console.error('Call error:', err);
+            showNotification('Call failed: ' + err.message, 'error');
+          });
 
         } catch (error) {
-          console.error('Error accessing media devices:', error);
-          alert('Could not access camera/microphone. Please check permissions.');
+          console.error('Error establishing call:', error);
+          showNotification('Failed to establish video connection', 'error');
         }
       });
 
       newPeer.on('error', (error) => {
         console.error('PeerJS error:', error);
-        alert('Failed to join room: ' + error.message);
+        showNotification('Failed to join room: ' + error.message, 'error');
       });
 
     } catch (error) {
       console.error('Error joining room:', error);
-      alert('Failed to join room: ' + error.message);
+      showNotification('Failed to join room: ' + error.message, 'error');
     }
   };
 
@@ -1340,6 +1440,11 @@ const VoiceToImage = () => {
     setRoomId('');
     setJoinRoomId('');
     
+    // Clear notifications and participants
+    setNotifications([]);
+    setConnectedParticipants([]);
+    setRemoteUserInfo(null);
+    
     // Show placeholder again
     const placeholder = document.querySelector('.video-placeholder');
     if (placeholder) {
@@ -1353,6 +1458,8 @@ const VoiceToImage = () => {
     if (remoteVideo) remoteVideo.srcObject = null;
     
     document.getElementById('roomId').textContent = 'Not created';
+    
+    showNotification('Call ended', 'info');
   };
 
   const copyRoomId = () => {
@@ -2064,6 +2171,48 @@ const VoiceToImage = () => {
               </div>
               
               <div className="sidebar">
+                {/* Notifications Panel */}
+                {notifications.length > 0 && (
+                  <div className="notifications-panel">
+                    <h4>Notifications</h4>
+                    <div className="notifications-list">
+                      {notifications.map((notification) => (
+                        <div 
+                          key={notification.id} 
+                          className={`notification notification-${notification.type}`}
+                        >
+                          <div className="notification-content">
+                            <i className={`fas fa-${notification.type === 'join' ? 'user-plus' : notification.type === 'success' ? 'check-circle' : notification.type === 'error' ? 'exclamation-triangle' : 'info-circle'}`}></i>
+                            <span className="notification-message">{notification.message}</span>
+                          </div>
+                          <span className="notification-time">{notification.timestamp}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Connected Participants */}
+                {connectedParticipants.length > 0 && (
+                  <div className="participants-panel">
+                    <h4>Connected ({connectedParticipants.length})</h4>
+                    <div className="participants-list">
+                      {connectedParticipants.map((participant) => (
+                        <div key={participant.id} className="participant">
+                          <div className="participant-info">
+                            <i className={`fas fa-${participant.role === 'host' ? 'crown' : 'user'}`}></i>
+                            <div>
+                              <div className="participant-name">{participant.name}</div>
+                              <div className="participant-location">{participant.location}</div>
+                            </div>
+                          </div>
+                          <span className="participant-role">{participant.role}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="room-controls">
                   <div className="room-id-display">
                     <label>Room ID:</label>

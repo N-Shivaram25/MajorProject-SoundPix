@@ -1997,3 +1997,139 @@
   width: 95%;
   margin: 0 auto;
 }
+
+/* Notifications and Participants Panels */
+.notifications-panel, .participants-panel {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--card-bg);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.notifications-panel h4, .participants-panel h4 {
+  margin: 0 0 1rem 0;
+  color: var(--primary-color);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.notification {
+  padding: 0.75rem;
+  border-radius: 8px;
+  border-left: 4px solid transparent;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.notification-join {
+  background: linear-gradient(135deg, #d4edda, #c3e6cb);
+  border-left-color: #28a745;
+  color: #155724;
+}
+
+.notification-success {
+  background: linear-gradient(135deg, #d1ecf1, #bee5eb);
+  border-left-color: #17a2b8;
+  color: #0c5460;
+}
+
+.notification-error {
+  background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+  border-left-color: #dc3545;
+  color: #721c24;
+}
+
+.notification-info {
+  background: linear-gradient(135deg, #e2e3e5, #d6d8db);
+  border-left-color: #6c757d;
+  color: #383d41;
+}
+
+.notification-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.notification-message {
+  font-weight: 500;
+}
+
+.notification-time {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.participants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.participant {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.participant-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.participant-info i {
+  color: var(--primary-color);
+  font-size: 1.2rem;
+}
+
+.participant-name {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.participant-location {
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
+.participant-role {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
