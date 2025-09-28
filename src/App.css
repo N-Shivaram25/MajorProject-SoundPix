@@ -629,6 +629,46 @@
   grid-template-columns: 1fr 350px;
   gap: 2rem;
   min-height: 600px;
+  transition: all 0.3s ease;
+}
+
+.videocall-main.minimized {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 350px;
+  height: 250px;
+  z-index: 1000;
+  grid-template-columns: 1fr;
+  min-height: auto;
+  background: var(--card-bg);
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  border: 2px solid var(--primary-color);
+}
+
+.videocall-main.minimized .sidebar {
+  display: none;
+}
+
+.videocall-main.minimized .video-section {
+  margin: 0;
+  padding: 1rem;
+}
+
+.videocall-main.minimized .main-video-screen {
+  height: 150px;
+  margin-bottom: 0.5rem;
+}
+
+.videocall-main.minimized .video-controls {
+  gap: 0.5rem;
+}
+
+.videocall-main.minimized .video-control-btn {
+  width: 40px;
+  height: 40px;
+  font-size: 1rem;
 }
 
 .video-section {
@@ -746,6 +786,28 @@
   background: linear-gradient(135deg, #42a5f5, #1e88e5);
   transform: scale(1.15);
   box-shadow: 0 6px 20px rgba(30, 136, 229, 0.4);
+}
+
+/* Fullscreen button - purple gradient */
+.video-control-btn.fullscreen-btn {
+  background: linear-gradient(135deg, #9c27b0, #673ab7);
+}
+
+.video-control-btn.fullscreen-btn:hover {
+  background: linear-gradient(135deg, #ba68c8, #9c27b0);
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(156, 39, 176, 0.4);
+}
+
+/* Minimize button - orange gradient */
+.video-control-btn.minimize-btn {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+.video-control-btn.minimize-btn:hover {
+  background: linear-gradient(135deg, #ffb74d, #ff9800);
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(255, 152, 0, 0.4);
 }
 
 /* End call button - red gradient */

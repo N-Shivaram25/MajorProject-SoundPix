@@ -62,6 +62,9 @@ const VoiceToImage = () => {
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isTranslationActive, setIsTranslationActive] = useState(false);
   const [translationRecognition, setTranslationRecognition] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [mainVideoView, setMainVideoView] = useState('remote'); // 'local' or 'remote'
   
   // Notification and participant states
   const [notifications, setNotifications] = useState([]);
@@ -1198,7 +1201,7 @@ const VoiceToImage = () => {
         
         // Ensure video plays immediately
         localVideo.onloadedmetadata = () => {
-          console.log('Local video metadata loaded');
+          console.log('Local video metadata loaded, dimensions:', localVideo.videoWidth, 'x', localVideo.videoHeight);
           localVideo.play().catch(e => {
             console.log('Local video autoplay prevented:', e);
             // Try to play after user interaction
@@ -1216,7 +1219,10 @@ const VoiceToImage = () => {
         }, 100);
       }
       
-      console.log('Local video setup complete');
+      console.log('Local video setup complete with tracks:', {
+        video: stream.getVideoTracks().map(track => ({ label: track.label, enabled: track.enabled })),
+        audio: stream.getAudioTracks().map(track => ({ label: track.label, enabled: track.enabled }))
+      });
       return stream;
     } catch (error) {
       console.error('Error accessing media devices:', error);
@@ -1227,15 +1233,36 @@ const VoiceToImage = () => {
 
   const setupRemoteVideo = (stream) => {
     console.log('Setting up remote video with stream:', stream);
+    console.log('Remote stream tracks:', {
+      video: stream.getVideoTracks().map(track => ({ label: track.label, enabled: track.enabled })),
+      audio: stream.getAudioTracks().map(track => ({ label: track.label, enabled: track.enabled }))
+    });
+    
     setRemoteStream(stream);
     const remoteVideo = document.getElementById('remoteVideo');
     if (remoteVideo) {
       remoteVideo.srcObject = stream;
       remoteVideo.volume = 1; // Enable audio for remote video
+      remoteVideo.muted = false; // Allow remote audio
+      
       remoteVideo.onloadedmetadata = () => {
-        console.log('Remote video metadata loaded');
-        remoteVideo.play().catch(e => console.log('Remote video autoplay prevented:', e));
+        console.log('Remote video metadata loaded, dimensions:', remoteVideo.videoWidth, 'x', remoteVideo.videoHeight);
+        remoteVideo.play().catch(e => {
+          console.log('Remote video autoplay prevented:', e);
+          // Try to play after user interaction
+          document.addEventListener('click', () => {
+            remoteVideo.play().catch(err => console.log('Remote manual play failed:', err));
+          }, { once: true });
+        });
       };
+      
+      // Force immediate play attempt
+      setTimeout(() => {
+        if (remoteVideo.paused) {
+          console.log('Attempting to play remote video...');
+          remoteVideo.play().catch(e => console.log('Remote delayed autoplay prevented:', e));
+        }
+      }, 100);
     }
     
     // Hide placeholder when remote video is connected
@@ -1243,25 +1270,30 @@ const VoiceToImage = () => {
     if (placeholder) {
       placeholder.style.display = 'none';
     }
+    
+    // Set initial video layout to show remote video as main
+    setMainVideoView('remote');
+    console.log('Remote video setup complete');
   };
   
   // Video layout switching function
   const switchVideoLayout = () => {
+    const currentView = mainVideoView;
+    setMainVideoView(currentView === 'remote' ? 'local' : 'remote');
+    
     const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
     
     if (localVideo && remoteVideo) {
-      // Toggle between small and large view
-      const isLocalSmall = localVideo.style.position === 'absolute';
-      
-      if (isLocalSmall) {
-        // Make local video large, remote video small
+      if (currentView === 'remote') {
+        // Switch to local video as main
         localVideo.style.position = 'static';
         localVideo.style.width = '100%';
         localVideo.style.height = '100%';
         localVideo.style.top = 'auto';
         localVideo.style.right = 'auto';
         localVideo.style.zIndex = '1';
+        localVideo.style.objectFit = 'cover';
         
         remoteVideo.style.position = 'absolute';
         remoteVideo.style.width = '150px';
@@ -1269,14 +1301,20 @@ const VoiceToImage = () => {
         remoteVideo.style.top = '10px';
         remoteVideo.style.right = '10px';
         remoteVideo.style.zIndex = '10';
+        remoteVideo.style.objectFit = 'cover';
+        remoteVideo.style.borderRadius = '8px';
+        remoteVideo.style.border = '2px solid white';
       } else {
-        // Make remote video large, local video small
+        // Switch to remote video as main (default)
         remoteVideo.style.position = 'static';
         remoteVideo.style.width = '100%';
         remoteVideo.style.height = '100%';
         remoteVideo.style.top = 'auto';
         remoteVideo.style.right = 'auto';
         remoteVideo.style.zIndex = '1';
+        remoteVideo.style.objectFit = 'cover';
+        remoteVideo.style.border = 'none';
+        remoteVideo.style.borderRadius = '0';
         
         localVideo.style.position = 'absolute';
         localVideo.style.width = '150px';
@@ -1284,8 +1322,72 @@ const VoiceToImage = () => {
         localVideo.style.top = '10px';
         localVideo.style.right = '10px';
         localVideo.style.zIndex = '10';
+        localVideo.style.objectFit = 'cover';
+        localVideo.style.borderRadius = '8px';
+        localVideo.style.border = '2px solid white';
       }
     }
+  };
+
+  // Fullscreen functionality
+  const toggleFullscreen = () => {
+    const videoContainer = document.querySelector('.main-video-screen');
+    
+    if (!isFullscreen) {
+      // Enter fullscreen
+      if (videoContainer.requestFullscreen) {
+        videoContainer.requestFullscreen();
+      } else if (videoContainer.webkitRequestFullscreen) {
+        videoContainer.webkitRequestFullscreen();
+      } else if (videoContainer.mozRequestFullScreen) {
+        videoContainer.mozRequestFullScreen();
+      } else if (videoContainer.msRequestFullscreen) {
+        videoContainer.msRequestFullscreen();
+      }
+      setIsFullscreen(true);
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+      setIsFullscreen(false);
+    }
+  };
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+      setIsFullscreen(isCurrentlyFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Minimize functionality
+  const toggleMinimize = () => {
+    setIsMinimized(!isMinimized);
   };
 
   const createRoom = async () => {
@@ -1567,6 +1669,11 @@ const VoiceToImage = () => {
     setRoomId('');
     setJoinRoomId('');
     
+    // Reset video call states
+    setIsFullscreen(false);
+    setIsMinimized(false);
+    setMainVideoView('remote');
+    
     // Clear notifications and participants
     setNotifications([]);
     setConnectedParticipants([]);
@@ -1578,11 +1685,30 @@ const VoiceToImage = () => {
       placeholder.style.display = 'flex';
     }
     
-    // Clear video elements
+    // Clear video elements and reset their styles
     const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
-    if (localVideo) localVideo.srcObject = null;
-    if (remoteVideo) remoteVideo.srcObject = null;
+    if (localVideo) {
+      localVideo.srcObject = null;
+      localVideo.style.cssText = '';
+    }
+    if (remoteVideo) {
+      remoteVideo.srcObject = null;
+      remoteVideo.style.cssText = '';
+    }
+    
+    // Exit fullscreen if active
+    if (document.fullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+    }
     
     document.getElementById('roomId').textContent = 'Not created';
     
@@ -2260,7 +2386,7 @@ const VoiceToImage = () => {
               </div>
             </div>
             
-            <div className="videocall-main">
+            <div className={`videocall-main ${isMinimized ? 'minimized' : ''}`}>
               <div className="video-section">
                 <div className="main-video-screen">
                   <video 
@@ -2268,6 +2394,7 @@ const VoiceToImage = () => {
                     autoPlay 
                     muted 
                     playsInline
+                    webkit-playsinline="true"
                     onClick={switchVideoLayout}
                     style={{cursor: 'pointer'}}
                     title="Click to switch view"
@@ -2276,6 +2403,7 @@ const VoiceToImage = () => {
                     id="remoteVideo" 
                     autoPlay 
                     playsInline
+                    webkit-playsinline="true"
                     onClick={switchVideoLayout}
                     style={{cursor: 'pointer'}}
                     title="Click to switch view"
@@ -2301,6 +2429,20 @@ const VoiceToImage = () => {
                     title={isVideoOff ? "Turn on video" : "Turn off video"}
                   >
                     <i className={`fas fa-${isVideoOff ? 'video-slash' : 'video'}`}></i>
+                  </button>
+                  <button 
+                    className="video-control-btn fullscreen-btn" 
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  >
+                    <i className={`fas fa-${isFullscreen ? 'compress' : 'expand'}`}></i>
+                  </button>
+                  <button 
+                    className="video-control-btn minimize-btn" 
+                    onClick={toggleMinimize}
+                    title={isMinimized ? "Restore" : "Minimize"}
+                  >
+                    <i className={`fas fa-${isMinimized ? 'window-restore' : 'window-minimize'}`}></i>
                   </button>
                   <button 
                     className="video-control-btn end-call" 
